@@ -177,7 +177,20 @@ def find_original_for_ppm(ppm_filename: str) -> str:
     return ppm_filename
 
 
-def run_c_search(query_ppm: Path, top_k: int = 6, num_threads: int = 4) -> Dict[str, Any]:
+# Allow-list of distance metrics the C binary understands. We validate the
+# metric name here in Python so we never pass arbitrary user input through
+# to the subprocess argv. The C side defaults to euclidean if it gets
+# something it doesn't recognize, but failing fast in Python gives a much
+# better error message.
+ALLOWED_METRICS = ("euclidean", "manhattan", "cosine")
+
+
+def run_c_search(
+    query_ppm: Path,
+    top_k: int = 6,
+    num_threads: int = 4,
+    metric: str = "euclidean",
+) -> Dict[str, Any]:
     """
     Runs the similarity search by calling the compiled C binary as a subprocess.
 
@@ -192,6 +205,8 @@ def run_c_search(query_ppm: Path, top_k: int = 6, num_threads: int = 4) -> Dict[
     query_ppm   — path to the query image in PPM format
     top_k       — how many results to request from the C binary
     num_threads — how many threads the C binary should use
+    metric      — distance metric: "euclidean", "manhattan", or "cosine".
+                  Anything else falls back to "euclidean".
 
     Returns the parsed JSON result dict, enriched with UI-friendly fields.
     """
@@ -202,9 +217,16 @@ def run_c_search(query_ppm: Path, top_k: int = 6, num_threads: int = 4) -> Dict[
             f"Run `make` in the algorithm directory first."
         )
 
+    # Normalize and validate the metric name. We trim whitespace, lowercase,
+    # and fall back to "euclidean" for anything we don't recognize so the
+    # caller can pass user-controlled input safely.
+    metric_name = (metric or "euclidean").strip().lower()
+    if metric_name not in ALLOWED_METRICS:
+        metric_name = "euclidean"
+
     # Build the exact command line we'll pass to the OS.
     # This is equivalent to typing something like:
-    #   ./algorithm/bin/imgsearch query.ppm data/ppm data/features.cache 6 4 data/output.json
+    #   ./algorithm/bin/imgsearch query.ppm data/ppm data/features.cache 6 4 data/output.json cosine
     cmd = [
         str(ALGORITHM_BIN),     # the binary to run
         str(query_ppm),         # argument 1: query PPM path
@@ -213,6 +235,7 @@ def run_c_search(query_ppm: Path, top_k: int = 6, num_threads: int = 4) -> Dict[
         str(top_k),             # argument 4: how many results to return
         str(num_threads),       # argument 5: how many threads to use
         str(OUTPUT_JSON),       # argument 6: where to write the JSON output
+        metric_name,            # argument 7 (optional): which distance metric to use
     ]
 
     # subprocess.run runs the command and waits for it to finish.

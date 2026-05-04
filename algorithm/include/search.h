@@ -11,6 +11,15 @@
  *
  * The two structs below carry the output and the timing diagnostics back
  * to the caller (main.c), which then writes them as JSON.
+ *
+ * --- Pluggable distance metrics ---
+ *
+ * run_search() accepts a `metric` string ("euclidean", "manhattan",
+ * "cosine", or NULL for the default). Internally it calls
+ * pick_distance_function() from similarity.h to turn that string into a
+ * function pointer, stores the pointer in the shared thread state, and
+ * the worker threads call it via the pointer for every comparison.
+ * The threading code itself never names a specific metric.
  */
 
 #ifndef SEARCH_H
@@ -22,6 +31,10 @@
 /* The maximum number of top results we can ever return.
  * Callers ask for top_k results and top_k must be ≤ this. */
 #define MAX_TOP_K 32
+
+/* Maximum length (including null terminator) for a metric name string
+ * carried inside SearchStats. "manhattan" is the longest current name. */
+#define MAX_METRIC_NAME_LEN 32
 
 /*
  * SearchResult — one entry in the ranked results list.
@@ -47,12 +60,16 @@ typedef struct {
  * cache_hit            — 1 if we loaded features from the cache file,
  *                        0 if we had to extract from scratch
  * elapsed_ms           — total wall-clock time the search took, in milliseconds
+ * metric               — name of the distance metric that was actually used
+ *                        ("euclidean", "manhattan", "cosine"); useful in
+ *                        the JSON so the UI can label which metric ran
  */
 typedef struct {
     int total_dataset_images;
     int threads_used;
     int cache_hit;
     double elapsed_ms;
+    char metric[MAX_METRIC_NAME_LEN];
 } SearchStats;
 
 /*
@@ -64,6 +81,8 @@ typedef struct {
  *               written if it doesn't)
  * top_k       — how many of the closest matches to return; must be 1..MAX_TOP_K
  * num_threads — how many worker threads to spawn; will be clamped to 1..16
+ * metric      — distance metric name: "euclidean", "manhattan", "cosine".
+ *               Pass NULL or an unknown name to default to euclidean.
  * results_out — caller provides this array of size top_k; we fill it in
  * stats_out   — pointer to a SearchStats to fill in, or NULL if you don't care
  *
@@ -76,6 +95,7 @@ int run_search(const char *query_ppm,
                const char *cache_path,
                int top_k,
                int num_threads,
+               const char *metric,
                SearchResult *results_out,
                SearchStats *stats_out);
 

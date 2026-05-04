@@ -17,8 +17,16 @@
  *   - pthread_create / pthread_join  (creating and waiting for threads)
  *   - pthread_mutex_t                (locking shared data between threads)
  *   - struct with function pointers  (passing state to thread workers)
+ *   - DistanceFunction pointer       (runtime-chosen distance metric)
  *   - dynamic memory allocation      (malloc / realloc / free)
  *   - directory traversal            (opendir / readdir / closedir)
+ *
+ * Pluggable distance metric: SharedSearchState carries a DistanceFunction
+ * function pointer. run_search() resolves the user-supplied metric name
+ * (e.g. "cosine") to a function pointer once, stores it, and every worker
+ * thread invokes the metric through that pointer. The threading code never
+ * mentions a specific distance function by name — it just calls
+ * `state->metric_fn(query_fv, dataset_fv)`.
  */
 
 /* _POSIX_C_SOURCE enables POSIX extensions like strdup and gettimeofday
@@ -66,6 +74,11 @@ typedef struct {
     const FeatureVector *query_fv;
     const FeatureVector *dataset_fvs;
     int dataset_count;
+
+    /* The distance metric to use, chosen at runtime by run_search().
+     * Every worker calls this through the pointer, so the threading
+     * code stays metric-agnostic. */
+    DistanceFunction metric_fn;
 
     /* Work queue — protected by work_mutex */
     int next_index;
@@ -184,9 +197,14 @@ static void *worker(void *arg) {
         /* --- Compute the distance (no lock needed here) ---
          * We're only reading from query_fv and dataset_fvs, which are
          * written once before threads start and never modified after.
-         * Reading from immutable shared data is always safe. */
+         * Reading from immutable shared data is always safe.
+         *
+         * `state->metric_fn` is a function pointer set up by run_search().
+         * Calling it looks like a normal function call but the actual
+         * function (euclidean / manhattan / cosine) was decided at runtime
+         * — this is the function-pointer indirection in action. */
         const FeatureVector *fv = &state->dataset_fvs[idx];
-        float dist = euclidean_distance(state->query_fv, fv);
+        float dist = state->metric_fn(state->query_fv, fv);
 
         /* --- Try to add this result to the shared top-K list ---
          * We must hold topk_mutex here because try_insert_topk modifies
@@ -399,6 +417,7 @@ int run_search(const char *query_ppm,
                const char *cache_path,
                int top_k,
                int num_threads,
+               const char *metric,
                SearchResult *results_out,
                SearchStats *stats_out) {
     /* Clamp the parameters to sane ranges */
@@ -406,6 +425,19 @@ int run_search(const char *query_ppm,
     if (top_k > MAX_TOP_K) top_k = MAX_TOP_K;
     if (num_threads <= 0) num_threads = 1;
     if (num_threads > 16) num_threads = 16;
+
+    /* --- Resolve the metric name to a function pointer ---
+     * pick_distance_function() is permissive: NULL or unknown names
+     * fall back to euclidean_distance, so old callers that don't pass
+     * a metric still get the original behaviour. */
+    DistanceFunction metric_fn = pick_distance_function(metric);
+
+    /* For the JSON / stats output we want to report exactly which metric
+     * actually ran, even if the caller passed NULL or a typo. We do this
+     * by reverse-mapping the function pointer back to a canonical name. */
+    const char *metric_used = "euclidean";
+    if (metric_fn == manhattan_distance) metric_used = "manhattan";
+    else if (metric_fn == cosine_distance) metric_used = "cosine";
 
     /* Record the start time so we can compute elapsed time at the end */
     double t_start = now_ms();
@@ -453,6 +485,7 @@ int run_search(const char *query_ppm,
     state.query_fv = &query_fv;         /* read-only for threads */
     state.dataset_fvs = fvs;            /* read-only for threads */
     state.dataset_count = n;
+    state.metric_fn = metric_fn;        /* function pointer used by every worker */
     state.next_index = 0;               /* start at the first dataset image */
 
     /* Allocate the shared results array — cleared to zero by calloc */
@@ -510,6 +543,14 @@ int run_search(const char *query_ppm,
         stats_out->threads_used = actually_started > 0 ? actually_started : 1;
         stats_out->cache_hit = cache_hit;
         stats_out->elapsed_ms = t_end - t_start;
+
+        /* Record which metric was actually used. strncpy + manual NUL
+         * keeps us safe against an oversized name and silences
+         * -Wstringop-truncation on stricter compilers. */
+        size_t mlen = strlen(metric_used);
+        if (mlen >= MAX_METRIC_NAME_LEN) mlen = MAX_METRIC_NAME_LEN - 1;
+        memcpy(stats_out->metric, metric_used, mlen);
+        stats_out->metric[mlen] = '\0';
     }
 
     return written;     /* how many results we put into results_out */

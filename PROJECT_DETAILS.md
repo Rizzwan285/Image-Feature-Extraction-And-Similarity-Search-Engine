@@ -108,8 +108,11 @@ here. The compiled binary is called `imgsearch` and is invoked from the command
 line like this:
 
 ```
-./algorithm/bin/imgsearch <query.ppm> <dataset_dir> <cache_path> <top_k> <num_threads> <output.json>
+./algorithm/bin/imgsearch <query.ppm> <dataset_dir> <cache_path> <top_k> <num_threads> <output.json> [metric]
 ```
+
+The optional `[metric]` argument is one of `euclidean` (default), `manhattan`,
+or `cosine`. Omitted or unknown values fall back to Euclidean.
 
 **How the algorithm works:**
 
@@ -148,8 +151,38 @@ line like this:
 6. **Assign ranks and write JSON** — number the results 1, 2, 3, ... and write
    a JSON file that Python reads.
 
-**The distance formula:** Euclidean (L2) distance over the concatenated 534-float
-vectors. Lower distance = more similar. An image compared against itself = 0.
+**The distance formula:** the user picks one of three metrics at runtime;
+all of them operate on the concatenated 534-float vectors and return 0 when
+two images are identical, with higher values meaning more different.
+
+| Metric | Formula | Selected by |
+|--------|---------|-------------|
+| Euclidean (L2) | `sqrt( sum (a[i] - b[i])^2 )` | `"euclidean"` (default) |
+| Manhattan (L1) | `sum( |a[i] - b[i]| )` | `"manhattan"` |
+| Cosine         | `1 - (a · b) / (‖a‖·‖b‖)`     | `"cosine"` |
+
+**How runtime metric selection works (function pointers):**
+
+- `similarity.h` declares a typedef:
+  ```c
+  typedef float (*DistanceFunction)(const FeatureVector *, const FeatureVector *);
+  ```
+  A `DistanceFunction` is a pointer to any function with that exact
+  signature — `euclidean_distance`, `manhattan_distance`, and
+  `cosine_distance` all qualify.
+- `pick_distance_function(name)` maps a string ("euclidean" / "manhattan"
+  / "cosine") to the matching function pointer. NULL or unknown names
+  fall back to Euclidean so old callers keep working.
+- `run_search()` calls `pick_distance_function()` once, stores the
+  resulting pointer in `SharedSearchState.metric_fn`, and worker threads
+  invoke the metric through `state->metric_fn(query, candidate)`. The
+  threading code never mentions a specific distance function by name —
+  swapping in a new metric is a one-function-plus-one-table-entry change.
+
+This is the C-level demonstration of "runtime algorithm selection": the
+user's choice flows React → FastAPI → subprocess argv → `pick_distance_function`
+→ a function pointer in shared state → the worker's call site, with no
+`if`/`switch` inside the hot loop.
 
 **C Concepts Demonstrated:**
 
@@ -158,6 +191,7 @@ vectors. Lower distance = more similar. An image compared against itself = 0.
 | Structures (`struct`) | `Image`, `FeatureVector`, `SearchResult`, `SearchStats`, `SharedSearchState` |
 | Functions | One clearly-named function per task, split across 5 source files |
 | Pointers | Struct-by-pointer everywhere, pixel buffer as `unsigned char *`, dynamic arrays |
+| Function pointers | `DistanceFunction` typedef in `similarity.h`; `SharedSearchState.metric_fn` lets workers call the user-selected metric without naming it |
 | Makefile | `algorithm/Makefile` with object files, dependency rules, `clean` target |
 | Modular programming | Five `.c` files, each with a matching `.h`, one concern per file |
 | Custom header files | Include guards, public API declarations, private helpers `static` in `.c` |

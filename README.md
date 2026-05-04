@@ -60,9 +60,18 @@ original images back to the UI.
 **Algorithm layer** (`algorithm/`) is pure C. It reads PPM images, extracts
 a 534-float feature vector for each one (an RGB histogram plus per-channel
 mean and variance plus a 4×4 grid of intensity means), and ranks the dataset
-against the query using Euclidean distance. Multiple worker threads do the
-extraction and comparison in parallel, and a mutex protects the shared
-top-K results array.
+against the query using a configurable distance metric (Euclidean, Manhattan,
+or Cosine). Multiple worker threads do the extraction and comparison in
+parallel, and a mutex protects the shared top-K results array.
+
+The metric is selected at runtime via a **C function pointer**. `similarity.h`
+declares a `DistanceFunction` typedef — a pointer to any function that takes
+two `FeatureVector *` and returns a `float`. `pick_distance_function()` maps
+the user's choice ("euclidean" / "manhattan" / "cosine") to the matching
+function, and the search core stores that pointer in its shared thread state.
+Worker threads call the metric through the pointer, so the threading code
+never names a specific distance function and a new metric can be plugged in
+by adding one function and one entry in the lookup table.
 
 **Backend layer** is just a binary cache file at `data/features.cache`. The
 C program writes feature vectors to it after the first run and reads from it
@@ -98,16 +107,29 @@ You can run the C program directly without the Python or React layers — useful
 for testing or for showing the professor what the algorithm produces on its own.
 
 ```
-./algorithm/bin/imgsearch <query.ppm> <dataset_dir> <cache_path> <top_k> <num_threads> <output.json>
+./algorithm/bin/imgsearch <query.ppm> <dataset_dir> <cache_path> <top_k> <num_threads> <output.json> [metric]
 ```
+
+The seventh argument (`metric`) is optional and selects which distance
+function pointer the search uses:
+
+| Value | Function called |
+|-------|-----------------|
+| `euclidean` (default) | `euclidean_distance` |
+| `manhattan` | `manhattan_distance` |
+| `cosine` | `cosine_distance` |
+
+If the argument is omitted (six-argument invocation) or unrecognized, the
+binary falls back to Euclidean — old call-sites keep working unchanged.
 
 For example:
 
 ```
-./algorithm/bin/imgsearch data/ppm/04_ocean_blue.ppm data/ppm data/features.cache 5 4 data/output.json
+./algorithm/bin/imgsearch data/ppm/04_ocean_blue.ppm data/ppm data/features.cache 5 4 data/output.json cosine
 ```
 
-It prints a summary to the terminal and writes the full result as JSON.
+It prints a summary to the terminal (including which metric ran) and writes
+the full result as JSON.
 
 ## Common problems
 

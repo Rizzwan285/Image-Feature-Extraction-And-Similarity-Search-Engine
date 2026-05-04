@@ -57,6 +57,12 @@ export default function App() {
   // error: a human-readable error string to show in the red error box, or null
   const [error, setError] = useState(null)
 
+  // metric: which distance metric the C binary should use for the next search.
+  // The C layer dispatches to a different function pointer based on this name
+  // (see similarity.c → pick_distance_function). Defaults to "euclidean" so
+  // behaviour matches what users have always seen on first load.
+  const [metric, setMetric] = useState('euclidean')
+
   // ---------------------------------------------------------------------------
   // refreshDataset — fetches the current dataset from the server
   // ---------------------------------------------------------------------------
@@ -102,6 +108,7 @@ export default function App() {
           query_filename: query.filename,
           top_k: 8,           // ask for top 8 matches
           num_threads: 4,     // use 4 worker threads in C
+          metric: metric,     // distance metric the C binary should use
         }),
       })
 
@@ -120,7 +127,7 @@ export default function App() {
       // Always hide the loading spinner, whether we succeeded or failed
       setIsSearching(false)
     }
-  }, [query, isSearching])  // re-create this function if query or isSearching changes
+  }, [query, isSearching, metric])  // re-create this function if query, isSearching, or metric changes
 
   // ---------------------------------------------------------------------------
   // handleUpload — sends an uploaded file to the server
@@ -211,6 +218,8 @@ export default function App() {
         onSearch={runSearch}
         onClearQuery={handleClearQuery}
         isSearching={isSearching}
+        metric={metric}
+        onMetricChange={setMetric}
       />
 
       {/* AnimatePresence lets Framer Motion animate components when they

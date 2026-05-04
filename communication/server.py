@@ -68,6 +68,11 @@ class SearchRequest(BaseModel):
     query_filename: str     # the image to use as the query
     top_k: int = 6          # how many results to return (default 6)
     num_threads: int = 4    # how many C threads to use (default 4)
+    # Distance metric the C layer should use. Validated in bridge.run_c_search;
+    # anything other than "euclidean" / "manhattan" / "cosine" falls back to
+    # "euclidean". Default keeps existing behaviour for callers that don't
+    # send a metric.
+    metric: str = "euclidean"
 
 
 @app.on_event("startup")
@@ -231,6 +236,7 @@ def search(req: SearchRequest) -> JSONResponse:
             query_ppm=query_ppm,
             top_k=max(1, min(req.top_k, 20)),           # clamp to 1..20
             num_threads=max(1, min(req.num_threads, 16)),  # clamp to 1..16
+            metric=req.metric,                           # forwarded to the C binary as argv[7]
         )
     except Exception as e:
         # Something went wrong running the C binary

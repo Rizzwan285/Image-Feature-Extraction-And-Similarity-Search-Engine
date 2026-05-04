@@ -16,6 +16,8 @@
 //   onSearch          — called when the user clicks "Search Similar Images"
 //   onClearQuery      — called when the user clicks "choose different image"
 //   isSearching       — disables buttons while a search is running
+//   metric            — current distance metric ("euclidean"|"manhattan"|"cosine")
+//   onMetricChange    — called with the new metric name when the dropdown changes
 
 // useState tracks local UI state (isDragging) that doesn't need to live in App.jsx
 // useRef gives us a reference to the hidden file input element
@@ -34,6 +36,8 @@ export default function QueryPanel({
   onSearch,
   onClearQuery,
   isSearching,
+  metric,
+  onMetricChange,
 }) {
   // isDragging: true while the user is hovering a file over the drop zone.
   // We use this to highlight the drop zone with a brighter border.
@@ -127,6 +131,24 @@ export default function QueryPanel({
                       {/* Button label changes while searching */}
                       <span>{isSearching ? 'Searching…' : 'Search Similar Images'}</span>
                     </motion.button>
+
+                    {/* Distance-metric selector — picks which C function pointer
+                        the algorithm layer dispatches to for this search */}
+                    <label className="flex items-center gap-2 text-sm">
+                      <span className="text-xs font-mono uppercase tracking-widest text-white/40">
+                        Metric
+                      </span>
+                      <select
+                        value={metric}
+                        onChange={(e) => onMetricChange?.(e.target.value)}
+                        disabled={isSearching}
+                        className="px-3 py-2 rounded-xl bg-white/5 border border-white/10 text-white/90 text-sm hover:bg-white/10 focus:outline-none focus:ring-2 focus:ring-accent-400/40 disabled:opacity-50 transition-colors"
+                      >
+                        <option value="euclidean" className="bg-ink-950">Euclidean (L2)</option>
+                        <option value="manhattan" className="bg-ink-950">Manhattan (L1)</option>
+                        <option value="cosine" className="bg-ink-950">Cosine</option>
+                      </select>
+                    </label>
 
                     {/* Secondary button to go back and pick a different image */}
                     <button

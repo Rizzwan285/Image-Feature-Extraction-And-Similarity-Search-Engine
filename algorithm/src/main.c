@@ -12,7 +12,15 @@
  * in action: Python speaks HTTP to React, and subprocess to C.
  *
  * Usage:
- *   ./imgsearch <query.ppm> <dataset_dir> <cache_path> <top_k> <num_threads> <output.json>
+ *   ./imgsearch <query.ppm> <dataset_dir> <cache_path> <top_k> <num_threads> <output.json> [metric]
+ *
+ * The seventh argument (metric) is optional. Accepted values:
+ *   euclidean   (default if omitted)
+ *   manhattan
+ *   cosine
+ *
+ * Older callers that pass only six arguments still work — the metric
+ * silently defaults to euclidean.
  */
 
 /* Bring in the SearchResult and SearchStats types, plus run_search() and MAX_TOP_K */
@@ -31,7 +39,8 @@
  */
 static void print_usage(const char *prog) {
     fprintf(stderr,
-        "Usage: %s <query.ppm> <dataset_dir> <cache_path> <top_k> <num_threads> <output.json>\n",
+        "Usage: %s <query.ppm> <dataset_dir> <cache_path> <top_k> <num_threads> <output.json> [metric]\n"
+        "  metric: euclidean (default), manhattan, or cosine\n",
         prog);
 }
 
@@ -75,7 +84,9 @@ static int write_results_json(const char *path,
     fprintf(fp, "    \"total_dataset_images\": %d,\n", stats->total_dataset_images);
     fprintf(fp, "    \"threads_used\": %d,\n", stats->threads_used);
     fprintf(fp, "    \"cache_hit\": %s,\n", stats->cache_hit ? "true" : "false");
-    fprintf(fp, "    \"elapsed_ms\": %.3f\n", stats->elapsed_ms);
+    fprintf(fp, "    \"elapsed_ms\": %.3f,\n", stats->elapsed_ms);
+    /* The metric the search actually used — useful so the UI can label it */
+    fprintf(fp, "    \"metric\": \"%s\"\n", stats->metric);
     fprintf(fp, "  },\n");
 
     /* The results array — one object per match */
@@ -101,16 +112,18 @@ static int write_results_json(const char *path,
 /*
  * main — program entry point.
  *
- * Reads the six required command-line arguments, calls run_search(), and
- * writes the results JSON. Also prints a human-readable summary to stdout
- * so whoever runs the binary on the command line can see what happened.
+ * Reads the six required command-line arguments (plus an optional 7th for the
+ * distance metric), calls run_search(), and writes the results JSON. Also
+ * prints a human-readable summary to stdout so whoever runs the binary on
+ * the command line can see what happened.
  *
- * argc — number of arguments (should be 7: program name + 6 args)
+ * argc — number of arguments (7 for old-style invocation, 8 with metric)
  * argv — the argument strings
  */
 int main(int argc, char **argv) {
-    /* We need exactly 6 arguments after the program name */
-    if (argc != 7) {
+    /* We accept either 6 or 7 positional args after the program name.
+     * The 7th (metric) is optional — older callers still work unchanged. */
+    if (argc != 7 && argc != 8) {
         print_usage(argv[0]);
         return 1;   /* non-zero exit code signals failure to the shell / Python */
     }
@@ -123,6 +136,11 @@ int main(int argc, char **argv) {
     int num_threads = atoi(argv[5]);        /* how many threads to use, e.g. 4 */
     const char *output_json = argv[6];      /* e.g. data/output.json */
 
+    /* Optional 7th argument: the distance metric name. NULL means "use the
+     * default" — run_search/pick_distance_function will fall back to
+     * euclidean for NULL or any unrecognized string. */
+    const char *metric = (argc == 8) ? argv[7] : NULL;
+
     /* Allocate space for the results on the stack — MAX_TOP_K is only 32 entries */
     SearchResult results[MAX_TOP_K];
     memset(results, 0, sizeof(results));    /* zero it out to avoid garbage values */
@@ -134,7 +152,7 @@ int main(int argc, char **argv) {
     /* Run the actual search — this is where all the interesting work happens.
      * See search.c for the threading implementation. */
     int n = run_search(query_path, dataset_dir, cache_path,
-                       top_k, num_threads, results, &stats);
+                       top_k, num_threads, metric, results, &stats);
     if (n < 0) {
         /* A negative return value means something went seriously wrong */
         fprintf(stderr, "search failed (code %d)\n", n);
@@ -147,10 +165,11 @@ int main(int argc, char **argv) {
     }
 
     /* Print a friendly summary to the terminal — handy when running manually */
-    printf("Search complete. dataset=%d threads=%d cache=%s elapsed=%.2fms\n",
+    printf("Search complete. dataset=%d threads=%d cache=%s metric=%s elapsed=%.2fms\n",
            stats.total_dataset_images,
            stats.threads_used,
            stats.cache_hit ? "HIT" : "MISS",   /* HIT = we used the cache */
+           stats.metric,
            stats.elapsed_ms);
 
     /* Print each result on its own line */
