@@ -1,0 +1,32 @@
+# C build artifacts
+algorithm/bin/
+*.o
+*.a
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+*.egg-info/
+
+# Node / React
+node_modules/
+dist/
+.vite/
+
+# Data caches
+data/ppm/
+data/features.cache
+data/output.json
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Env
+.env
+.env.local

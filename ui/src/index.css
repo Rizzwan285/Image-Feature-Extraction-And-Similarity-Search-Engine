@@ -1,0 +1,79 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: #070611;
+  color: #e9e7f7;
+  font-family: 'Inter', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+/* Animated aurora background — subtle, only set once on body */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -2;
+  background:
+    radial-gradient(ellipse 80% 60% at 20% 10%, rgba(58, 202, 255, 0.15), transparent 60%),
+    radial-gradient(ellipse 70% 50% at 80% 20%, rgba(217, 70, 239, 0.12), transparent 60%),
+    radial-gradient(ellipse 90% 70% at 50% 100%, rgba(58, 202, 255, 0.08), transparent 60%),
+    #070611;
+  pointer-events: none;
+}
+
+/* Subtle grid texture overlay */
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background-image: radial-gradient(circle at 1px 1px, rgba(255,255,255,0.04) 1px, transparent 0);
+  background-size: 28px 28px;
+  pointer-events: none;
+  mask-image: radial-gradient(ellipse 100% 80% at 50% 50%, black 30%, transparent 90%);
+}
+
+/* Custom scrollbar — dark and unobtrusive */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: #0c0a1d; }
+::-webkit-scrollbar-thumb { background: #2a2553; border-radius: 8px; }
+::-webkit-scrollbar-thumb:hover { background: #3a3470; }
+
+/* Glassmorphism utility class */
+.glass {
+  background: rgba(21, 18, 43, 0.55);
+  backdrop-filter: blur(14px) saturate(140%);
+  -webkit-backdrop-filter: blur(14px) saturate(140%);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+}
+.glass-strong {
+  background: rgba(21, 18, 43, 0.78);
+  backdrop-filter: blur(18px) saturate(150%);
+  -webkit-backdrop-filter: blur(18px) saturate(150%);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+}
+
+/* Gradient text utility */
+.gradient-text {
+  background: linear-gradient(135deg, #3acaff 0%, #d946ef 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+}
+
+/* Numeric / mono-style text */
+.font-mono { font-family: 'JetBrains Mono', ui-monospace, monospace; }
