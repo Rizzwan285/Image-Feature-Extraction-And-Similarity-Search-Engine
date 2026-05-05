@@ -1,15 +1,5 @@
 #!/usr/bin/env python3
-"""
-convert_to_ppm.py
------------------
-Converts every PNG/JPG image in an input directory to PPM (P6) format
-in an output directory.
-
-Usage:
-    python scripts/convert_to_ppm.py [input_dir] [output_dir]
-
-Defaults: data/images -> data/ppm
-"""
+"""converting png/jpg images to ppm format"""
 import os
 import sys
 from PIL import Image

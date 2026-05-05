@@ -1,15 +1,5 @@
 #!/usr/bin/env python3
-"""
-generate_sample_images.py
--------------------------
-Generates a small dataset of visually varied PNG images for the demo.
-All images are procedurally created here, so they are 100% CC0 / public domain.
-
-Usage:
-    python scripts/generate_sample_images.py [output_dir]
-
-Defaults to data/images/ relative to the project root.
-"""
+"""generating sample procedural images for dataset"""
 import math
 import os
 import random

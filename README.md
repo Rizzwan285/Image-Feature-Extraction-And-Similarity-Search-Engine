@@ -1,168 +1,122 @@
-# Image Similarity Search Engine
+# Image Feature Extraction & Similarity Search Engine
 
-A small image similarity search system. You upload a query image and it finds
-the most visually similar images from a dataset. The actual feature extraction
-and ranking are done in C, with parallel threads doing the comparison work.
+A high-performance image similarity search system designed to find visually similar images within a dataset based on a given query image. The core feature extraction and ranking algorithms are implemented in C using multi-threading for optimal performance.
 
-This is a C Programming course project. The point of it is to demonstrate
-clean modular C — structs, pointers, multiple files, custom headers, threads
-and a mutex — wrapped in a real-looking app so you can see it work end-to-end.
+This project was built to demonstrate clean, modular C programming—utilizing structs, pointers, multiple files, custom headers, multi-threading, and mutexes—wrapped within a modern, fully functional full-stack web application.
 
-## What you need installed
+## Key Features
 
-- `gcc` (any recent version)
-- `make`
-- Python 3.10 or newer + `pip`
-- Node.js 18 or newer + `npm`
+- **Multi-threaded C Core:** Extracts a 534-float feature vector per image (RGB histograms, per-channel mean and variance, and a 4×4 grid of intensity means) and ranks results concurrently using POSIX threads.
+- **Multiple Distance Metrics:** Search using Euclidean (L2), Manhattan (L1), or Cosine distance functions. Metrics are dynamically selected at runtime via C function pointers.
+- **Binary Feature Caching:** Extracted features are cached in a binary format (`data/features.cache`) for lightning-fast subsequent searches.
+- **FastAPI Bridge:** A Python backend that handles image conversion to PPM using Pillow, orchestrates the C binary subprocess execution, and serves the results.
+- **Modern React UI:** Built with Vite, Tailwind CSS, and Framer Motion. It provides a beautiful interface to upload query images, select images from the dataset, and visually compare the impact of different distance metrics.
 
-That's it. No databases, no Docker, no external image libraries.
+## Project Architecture
 
-## Run it after cloning
+The system is organized into a four-layer structure:
 
-```
-git clone <repo-url>
+1. **UI Layer (`ui/`)**
+   A React application built with Vite that provides a smooth, animated single-page interface. It allows users to upload queries or browse the dataset, and displays the ranked results along with animated similarity score bars.
+
+2. **Communication Layer (`communication/`)**
+   A FastAPI Python backend that acts as the bridge. When an image is queried, it converts it to the PPM format, invokes the compiled C binary as a subprocess, parses the JSON output, and returns the enriched data to the frontend.
+
+3. **Algorithm Layer (`algorithm/`)**
+   The computational heart of the system, written entirely in C. It parses PPM files, calculates detailed feature vectors, and compares the query against the dataset. The workload is distributed across multiple worker threads, with a mutex safeguarding the shared top-K results array.
+
+4. **Backend Layer (`data/`)**
+   A local filesystem layer that stores original images, generated PPMs, and the binary feature cache. The cache prevents redundant feature extraction, drastically reducing search times on subsequent runs.
+
+## Prerequisites
+
+To run this project, ensure you have the following installed:
+
+- `gcc` (A recent version for compiling the C binary)
+- `make` (For using the provided Makefile commands)
+- Python 3.10 or newer with `pip`
+- Node.js 18 or newer with `npm`
+
+## Setup & Execution
+
+### 1. Clone the Repository
+
+```bash
+git clone <repository-url>
 cd image-similarity-search
-
-make install      # installs python and node packages
-make              # compiles the C binary into algorithm/bin/imgsearch
-make sample-data  # generates the demo dataset (~20 small images)
-make run          # starts the FastAPI server and the Vite UI together
 ```
 
-Then open **http://localhost:5173** in your browser. The backend runs at
-`http://localhost:8000` and the UI proxies `/api/*` calls to it.
+### 2. Install Dependencies
 
-If you already have your own images in `data/images/`, you can skip
-`make sample-data`.
+Install the required Python packages and Node modules:
 
-### Faster restart
-
-Once you've run `make sample-data` once, you don't need to run it again. To
-restart the app in a new terminal session, just do:
-
+```bash
+make install
 ```
+
+### 3. Build the Application
+
+Compile the C algorithmic core into the `algorithm/bin/imgsearch` executable:
+
+```bash
+make
+```
+
+### 4. Generate Sample Data (Optional)
+
+If you do not have your own images, generate the procedural CC0 sample dataset (~20 images) to test the application:
+
+```bash
+make sample-data
+```
+*(If you prefer to use your own images, simply place your PNG/JPG files inside the `data/images/` directory before starting the application).*
+
+### 5. Run the Application
+
+Start both the FastAPI backend and the React frontend simultaneously:
+
+```bash
 make run
 ```
 
-## How it works
+Once running, open **http://localhost:5173** in your web browser. The FastAPI backend will be listening on `http://localhost:8000`.
 
-The project follows a four-layer structure as required by the course template.
+### Faster Restarts
 
-**UI layer** (`ui/`) is a React app built with Vite. It handles uploads,
-shows the dataset grid, and renders the ranked results with animated score
-bars. It does not run any of the actual algorithm.
+After your initial setup and data generation, you can quickly restart the application anytime using:
 
-**Communication layer** (`communication/`) is a small FastAPI server. When
-you upload an image it converts it to PPM with Pillow, then calls the C
-binary as a subprocess and reads the JSON it writes. It also serves the
-original images back to the UI.
-
-**Algorithm layer** (`algorithm/`) is pure C. It reads PPM images, extracts
-a 534-float feature vector for each one (an RGB histogram plus per-channel
-mean and variance plus a 4×4 grid of intensity means), and ranks the dataset
-against the query using a configurable distance metric (Euclidean, Manhattan,
-or Cosine). Multiple worker threads do the extraction and comparison in
-parallel, and a mutex protects the shared top-K results array.
-
-The metric is selected at runtime via a **C function pointer**. `similarity.h`
-declares a `DistanceFunction` typedef — a pointer to any function that takes
-two `FeatureVector *` and returns a `float`. `pick_distance_function()` maps
-the user's choice ("euclidean" / "manhattan" / "cosine") to the matching
-function, and the search core stores that pointer in its shared thread state.
-Worker threads call the metric through the pointer, so the threading code
-never names a specific distance function and a new metric can be plugged in
-by adding one function and one entry in the lookup table.
-
-**Backend layer** is just a binary cache file at `data/features.cache`. The
-C program writes feature vectors to it after the first run and reads from it
-on later runs, which is why the second search you do is much faster than the
-first.
-
-## Project structure
-
-```
-image-similarity-search/
-├── algorithm/          # the C code
-│   ├── include/        # custom header files
-│   ├── src/            # .c source files (one module per concern)
-│   ├── Makefile
-│   └── bin/            # compiled binary lives here (gitignored)
-├── communication/      # python bridge
-│   ├── server.py       # FastAPI endpoints
-│   ├── bridge.py       # subprocess wrapper + Pillow conversion
-│   └── requirements.txt
-├── ui/                 # react + vite frontend
-│   └── src/components/ # Hero, QueryPanel, ResultsGrid, etc.
-├── scripts/            # helpers for generating and converting sample data
-├── data/
-│   ├── images/         # original images (PNG/JPG)
-│   ├── ppm/            # PPM versions for the C binary (gitignored)
-│   └── features.cache  # binary feature cache (gitignored)
-└── Makefile            # top-level: install, build, run
+```bash
+make run
 ```
 
-## Using the C binary on its own
+## Running the C Binary Independently
 
-You can run the C program directly without the Python or React layers — useful
-for testing or for showing the professor what the algorithm produces on its own.
+You can execute the C algorithmic core directly from the terminal without the Python or React layers. This is highly useful for testing or benchmarking.
 
-```
+**Usage:**
+```bash
 ./algorithm/bin/imgsearch <query.ppm> <dataset_dir> <cache_path> <top_k> <num_threads> <output.json> [metric]
 ```
 
-The seventh argument (`metric`) is optional and selects which distance
-function pointer the search uses:
+**Distance Metrics:**
+The seventh argument (`metric`) is optional. It defaults to Euclidean distance.
 
-| Value | Function called |
+| Value | Function Called |
 |-------|-----------------|
 | `euclidean` (default) | `euclidean_distance` |
 | `manhattan` | `manhattan_distance` |
 | `cosine` | `cosine_distance` |
 
-If the argument is omitted (six-argument invocation) or unrecognized, the
-binary falls back to Euclidean — old call-sites keep working unchanged.
-
-For example:
-
+**Example Command:**
+```bash
+./algorithm/bin/imgsearch data/ppm/query.ppm data/ppm data/features.cache 5 4 data/output.json cosine
 ```
-./algorithm/bin/imgsearch data/ppm/04_ocean_blue.ppm data/ppm data/features.cache 5 4 data/output.json cosine
-```
+This runs the search using the Cosine distance metric, utilizing 4 threads to find the top 5 matches, and saves the results to `output.json`.
 
-It prints a summary to the terminal (including which metric ran) and writes
-the full result as JSON.
+## Troubleshooting
 
-## Common problems
-
-**`make` fails with "gcc not found"** — install build-essential:
-`sudo apt install build-essential` on Ubuntu, or Xcode command line tools on
-macOS.
-
-**The UI shows a "Could not reach the backend" error** — the FastAPI server
-isn't running on port 8000. `make run` starts both the API and the UI together;
-if you're running them separately, start the API first with `make run-api`.
-
-**No images appear in the dataset modal** — you haven't run `make sample-data`
-yet, or your `data/images/` folder is empty. Drop some PNGs in there and
-restart the API (it converts them to PPM on startup).
-
-**Search returns the wrong matches** — the feature cache might be stale if you
-swapped images around. Run `make clean-cache` and try again.
-
-**Port 5173 or 8000 is already in use** — kill whatever is using it, or change
-the port in `vite.config.js` and the relevant `make run-*` target.
-
-## Notes for the presentation
-
-When the professor runs `make` on a fresh checkout, they'll get the C binary
-built. They can then run `make sample-data` and `make run` to see the full
-demo. The sample images shipped in `data/images/` are procedurally generated
-inside `scripts/generate_sample_images.py`, so they're CC0 / fully owned and
-safe to commit and ship.
-
-The `R` keyboard shortcut re-runs the last search without clicking the button —
-handy when demoing different threading parameters or showing the cache hit
-speedup.
-
-The "view architecture" pill in the hero opens an overlay that lays out all
-four layers, the technologies in each, and the request flow. Useful during the
-architecture-explanation segment.
+- **`make` fails with "gcc not found":** Ensure you have the build tools installed (`sudo apt install build-essential` on Linux, or Xcode Command Line Tools on macOS).
+- **"Could not reach the backend" Error:** The FastAPI server is likely not running. Ensure you used `make run`, or manually start the backend using `make run-api`.
+- **No Images in the Dataset Modal:** Ensure you ran `make sample-data` or placed your own images into the `data/images/` directory. Restart the server so it can convert any new images to PPM format.
+- **Incorrect Search Matches / Stale Data:** If you have modified the dataset directly, your feature cache might be stale. Run `make clean-cache` to force the system to re-extract features on the next run.
+- **Ports Already in Use:** If ports 5173 or 8000 are blocked, terminate the conflicting processes, or modify the ports in `vite.config.js` and the `Makefile`.

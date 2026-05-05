@@ -1,10 +1,3 @@
-# Makefile for the C algorithm layer
-#
-# Builds bin/imgsearch from all sources in src/ using headers in include/.
-# Targets:
-#   make           - build the binary
-#   make clean     - remove build artifacts
-
 CC      = gcc
 CFLAGS  = -Wall -Wextra -O2 -std=c11 -Iinclude -pthread
 LDFLAGS = -pthread -lm
