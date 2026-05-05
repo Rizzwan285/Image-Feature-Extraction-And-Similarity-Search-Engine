@@ -7,10 +7,10 @@
 
 /*defining loaded image structure*/
 typedef struct {
-    int width;
-    int height;
-    unsigned char *pixels;
-    char filename[MAX_FILENAME_LEN];
+  int width;
+  int height;
+  unsigned char *pixels;
+  char filename[MAX_FILENAME_LEN];
 } Image;
 
 /*loading ppm image from disk*/
