@@ -89,6 +89,51 @@ After your initial setup and data generation, you can quickly restart the applic
 make run
 ```
 
+## Adding Your Own Images
+
+Drop any PNG, JPG, BMP, or WebP files into `data/images/` and restart the server — it will auto-convert them to PPM and rebuild the feature cache on first search.
+
+**For Recall@K to work correctly**, name your files using the convention `<category>_<id>.ext`, where the category is the first non-numeric token in the filename stem:
+
+| Filename | Category detected |
+|----------|------------------|
+| `sunset_01.jpg` | `sunset` |
+| `01_sunset_warm.png` | `sunset` |
+| `forest_dark.jpg` | `forest` |
+| `03_ocean_deep.png` | `ocean` |
+
+Images sharing a category name are treated as ground-truth positives for the evaluation. Aim for **2–5 images per category** to get meaningful recall scores.
+
+After adding images, run `make clean-cache` to ensure the feature cache is rebuilt.
+
+## REST API Endpoints
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/api/dataset` | List all images in the dataset |
+| `POST` | `/api/search` | Run single-metric similarity search |
+| `POST` | `/api/compare` | Run search under all 3 metrics simultaneously |
+| `POST` | `/api/evaluate` | Run Recall@K evaluation across the entire dataset |
+| `POST` | `/api/upload` | Upload a new image to the dataset |
+| `GET` | `/api/image/{filename}` | Serve an image file |
+
+**`POST /api/search`** body:
+```json
+{ "query_filename": "sunset_01.png", "top_k": 8, "num_threads": 4, "metric": "cosine" }
+```
+
+**`POST /api/compare`** body:
+```json
+{ "query_filename": "sunset_01.png", "top_k": 5, "num_threads": 4 }
+```
+Returns results for all three metrics in a single response.
+
+**`POST /api/evaluate`** body:
+```json
+{ "top_k": 5, "num_threads": 4 }
+```
+Returns per-metric Recall@K scores across all dataset images.
+
 ## Running the C Binary Independently
 
 You can execute the C algorithmic core directly from the terminal without the Python or React layers. This is highly useful for testing or benchmarking.

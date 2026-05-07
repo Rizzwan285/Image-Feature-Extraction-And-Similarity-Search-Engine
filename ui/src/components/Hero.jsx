@@ -62,7 +62,7 @@ export default function Hero({ onShowArchitecture, onShowEvaluation }) {
           className="text-lg text-white/60 max-w-2xl leading-relaxed"
         >
           Upload an image and find its closest visual matches across the dataset.
-          Feature extraction and ranking run in parallel C threads — the UI just
+          Feature extraction and ranking run in parallel C threads, the UI just
           shows you the result.
         </motion.p>
 
